@@ -1,0 +1,65 @@
+
+name: Build AvaCore APK
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        run: |
+          sdkmanager --install \
+            "platforms;android-34" \
+            "build-tools;35.0.0"
+          yes | sdkmanager --licenses
+
+      - name: Fix Gradle compatibility
+        run: |
+          sed -i \
+            's/gradle-9.1.0-bin.zip/gradle-8.10.2-bin.zip/' \
+            gradle/wrapper/gradle-wrapper.properties
+          sed -i '/distributionSha256Sum=/d' \
+            gradle/wrapper/gradle-wrapper.properties
+
+      - name: Download AvaCore assets
+        run: |
+          chmod +x download_assets.sh
+          bash download_assets.sh
+
+      - name: Verify required assets
+        run: |
+          test -s app/libs/sherpa-onnx.aar
+          test -s app/src/main/assets/tts/model_fa.onnx
+          test -s app/src/main/assets/tts/tokens_fa.txt
+          test -d app/src/main/assets/tts/espeak-ng-data
+
+      - name: Build Debug APK
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: AvaCore-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
